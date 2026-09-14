@@ -3,6 +3,14 @@ const path = require('path');
 const { tmpdir } = require('os');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 const { writeFile } = require('fs/promises');
+const settings = require('../settings');
+
+async function downloadBuffer(content, type) {
+    const stream = await downloadContentFromMessage(content, type);
+    const chunks = [];
+    for await (const chunk of stream) chunks.push(chunk);
+    return Buffer.concat(chunks);
+}
 
 const messageStore = new Map();
 const CONFIG_PATH = path.join(__dirname, '../data/antidelete.json');
@@ -126,15 +134,21 @@ async function storeMessage(sock, message) {
             if (viewOnceContainer.imageMessage) {
                 mediaType = 'image';
                 content = viewOnceContainer.imageMessage.caption || '';
-                const buffer = await downloadContentFromMessage(viewOnceContainer.imageMessage, 'image');
+                const buffer = await downloadBuffer(viewOnceContainer.imageMessage, 'image');
                 mediaPath = path.join(TEMP_MEDIA_DIR, `${messageId}.jpg`);
                 await writeFile(mediaPath, buffer);
                 isViewOnce = true;
             } else if (viewOnceContainer.videoMessage) {
                 mediaType = 'video';
                 content = viewOnceContainer.videoMessage.caption || '';
-                const buffer = await downloadContentFromMessage(viewOnceContainer.videoMessage, 'video');
+                const buffer = await downloadBuffer(viewOnceContainer.videoMessage, 'video');
                 mediaPath = path.join(TEMP_MEDIA_DIR, `${messageId}.mp4`);
+                await writeFile(mediaPath, buffer);
+                isViewOnce = true;
+            } else if (viewOnceContainer.audioMessage) {
+                mediaType = 'audio';
+                const buffer = await downloadBuffer(viewOnceContainer.audioMessage, 'audio');
+                mediaPath = path.join(TEMP_MEDIA_DIR, `${messageId}.mp3`);
                 await writeFile(mediaPath, buffer);
                 isViewOnce = true;
             }
@@ -145,25 +159,25 @@ async function storeMessage(sock, message) {
         } else if (message.message?.imageMessage) {
             mediaType = 'image';
             content = message.message.imageMessage.caption || '';
-            const buffer = await downloadContentFromMessage(message.message.imageMessage, 'image');
+            const buffer = await downloadBuffer(message.message.imageMessage, 'image');
             mediaPath = path.join(TEMP_MEDIA_DIR, `${messageId}.jpg`);
             await writeFile(mediaPath, buffer);
         } else if (message.message?.stickerMessage) {
             mediaType = 'sticker';
-            const buffer = await downloadContentFromMessage(message.message.stickerMessage, 'sticker');
+            const buffer = await downloadBuffer(message.message.stickerMessage, 'sticker');
             mediaPath = path.join(TEMP_MEDIA_DIR, `${messageId}.webp`);
             await writeFile(mediaPath, buffer);
         } else if (message.message?.videoMessage) {
             mediaType = 'video';
             content = message.message.videoMessage.caption || '';
-            const buffer = await downloadContentFromMessage(message.message.videoMessage, 'video');
+            const buffer = await downloadBuffer(message.message.videoMessage, 'video');
             mediaPath = path.join(TEMP_MEDIA_DIR, `${messageId}.mp4`);
             await writeFile(mediaPath, buffer);
         } else if (message.message?.audioMessage) {
             mediaType = 'audio';
             const mime = message.message.audioMessage.mimetype || '';
             const ext = mime.includes('mpeg') ? 'mp3' : (mime.includes('ogg') ? 'ogg' : 'mp3');
-            const buffer = await downloadContentFromMessage(message.message.audioMessage, 'audio');
+            const buffer = await downloadBuffer(message.message.audioMessage, 'audio');
             mediaPath = path.join(TEMP_MEDIA_DIR, `${messageId}.${ext}`);
             await writeFile(mediaPath, buffer);
         }
@@ -180,7 +194,7 @@ async function storeMessage(sock, message) {
         // Anti-ViewOnce: forward immediately to owner if captured
         if (isViewOnce && mediaType && fs.existsSync(mediaPath)) {
             try {
-                const ownerNumber = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+                const ownerNumber = settings.ownerNumber + '@s.whatsapp.net';
                 const senderName = sender.split('@')[0];
                 const mediaOptions = {
                     caption: `*Anti-ViewOnce ${mediaType}*
@@ -191,6 +205,8 @@ From: @${senderName}`,
                     await sock.sendMessage(ownerNumber, { image: { url: mediaPath }, ...mediaOptions });
                 } else if (mediaType === 'video') {
                     await sock.sendMessage(ownerNumber, { video: { url: mediaPath }, ...mediaOptions });
+                } else if (mediaType === 'audio') {
+                    await sock.sendMessage(ownerNumber, { audio: { url: mediaPath }, mimetype: 'audio/mpeg', ptt: false, ...mediaOptions });
                 }
                 // Cleanup immediately for view-once forward
                 try { fs.unlinkSync(mediaPath); } catch {}
@@ -212,7 +228,7 @@ async function handleMessageRevocation(sock, revocationMessage) {
 
         const messageId = revocationMessage.message.protocolMessage.key.id;
         const deletedBy = revocationMessage.participant || revocationMessage.key.participant || revocationMessage.key.remoteJid;
-        const ownerNumber = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+        const ownerNumber = settings.ownerNumber + '@s.whatsapp.net';
 
         if (deletedBy.includes(sock.user.id) || deletedBy === ownerNumber) return;
 

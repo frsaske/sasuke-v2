@@ -113,7 +113,12 @@ global.getNextSessionName = () => {
 };
 global.startSession = async (name) => {
     if (!/^session[1-5]$/.test(name)) throw new Error('Invalid session name');
-    return startXeonBotInc(name);
+    const socket = await startXeonBotInc(name);
+    await Promise.race([
+        socket.__connectionReady,
+        new Promise((_, reject) => setTimeout(() => reject(new Error(`${name} connection timeout`)), 60000))
+    ]);
+    return socket;
 };
 
 async function startXeonBotInc(sessionName = 'session1') {
@@ -148,6 +153,14 @@ async function startXeonBotInc(sessionName = 'session1') {
         XeonBotInc.sessionName = sessionName
         installFooter(XeonBotInc)
         global.activeSockets.set(sessionName, XeonBotInc)
+        let connectionReadyResolve;
+        let connectionReadyReject;
+        XeonBotInc.__connectionReady = new Promise((resolve, reject) => {
+            connectionReadyResolve = resolve;
+            connectionReadyReject = reject;
+        });
+        // Startup sessions are not awaited; prevent an early close from becoming unhandled.
+        XeonBotInc.__connectionReady.catch(() => {});
 
         // Save credentials when they update
         XeonBotInc.ev.on('creds.update', saveCreds)
@@ -279,6 +292,7 @@ async function startXeonBotInc(sessionName = 'session1') {
         }
         
         if (connection == "open") {
+            connectionReadyResolve(XeonBotInc)
             console.log(chalk.magenta(` `))
             console.log(chalk.yellow(`✅ [${sessionName}] Connected | 📱 ${XeonBotInc.user?.id?.split(':')[0]?.split('@')[0] || 'unknown'}`))
 
@@ -303,6 +317,7 @@ async function startXeonBotInc(sessionName = 'session1') {
         }
         
         if (connection === 'close') {
+            if (connectionReadyReject) connectionReadyReject(lastDisconnect?.error || new Error('connection closed'))
             const shouldReconnect = (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut
             const statusCode = lastDisconnect?.error?.output?.statusCode
             

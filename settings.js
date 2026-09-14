@@ -9,7 +9,7 @@ const settings = {
   maxStoreMessages: 20,
   storeWriteInterval: 10000,
   description: "This is a bot for managing group commands and automating tasks.",
-  version: "1.0.0",
+  version: "0.1",
   channelLink: "https://whatsapp.com/channel/0029VbDsHPCId7nRSI0Fce2W"
 };
 

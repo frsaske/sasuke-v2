@@ -41,7 +41,9 @@ const { autoreadCommand, isAutoreadEnabled, handleAutoread } = require('./comman
 
 // Command imports
 const tagAllCommand = require('./commands/tagall');
-const helpCommand = require('./commands/help');
+const helpModule = require('./commands/help');
+const helpCommand = helpModule.helpCommand || helpModule;
+const showAllCommand = helpModule.showAllCommand;
 const banCommand = require('./commands/ban');
 const { promoteCommand } = require('./commands/promote');
 const { demoteCommand } = require('./commands/demote');
@@ -142,6 +144,9 @@ const { anticallCommand, readState: readAnticallState } = require('./commands/an
 const { pmblockerCommand, readState: readPmBlockerState } = require('./commands/pmblocker');
 const settingsCommand = require('./commands/settings');
 const soraCommand = require('./commands/sora');
+const dpCommand = require('./commands/dp');
+const { toggle: toggleAutoFeature, handleAutoReply, handlePresence, read: readAutoFeatures } = require('./commands/autoFeatures');
+const { isDisabled } = require('./commands/registry');
 const connectCommand = require('./commands/owner/connect');
 const disconnectCommand = require('./commands/owner/disconnect');
 const sessionsCommand = require('./commands/owner/sessions');
@@ -152,7 +157,7 @@ const { installFooter } = require('./lib/footer');
 global.packname = settings.packname;
 global.author = settings.author;
 global.channelLink = settings.channelLink;
-global.ytch = "ꜰʀsᴀsᴋᴇ";
+global.ytch = "";
 
 // Add this near the top of main.js with other global configurations
 const channelInfo = {};
@@ -168,6 +173,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
 
         // Handle autoread functionality
         await handleAutoread(sock, message);
+        await handlePresence(sock, message);
 
         // Store message for antidelete feature
         if (message.message) {
@@ -223,6 +229,10 @@ async function handleMessages(sock, messageUpdate, printLog) {
             message.message?.imageMessage?.caption?.trim() ||
             message.message?.videoMessage?.caption?.trim() ||
             '';
+
+        if (!message.key.fromMe && !message.key.remoteJid.endsWith('@status')) {
+            await handleAutoReply(sock, chatId, message, userMessage);
+        }
 
         // Only log command usage
         if (userMessage.startsWith('.')) {
@@ -310,6 +320,11 @@ async function handleMessages(sock, messageUpdate, printLog) {
         }
         // In private mode, only owner/sudo can run commands
         if (!isPublic && !isOwnerOrSudoCheck) {
+            return;
+        }
+        const baseCommand = userMessage.split(/\s+/)[0];
+        if (isDisabled(baseCommand)) {
+            await sock.sendMessage(chatId, { text: `❌ ${baseCommand} is disabled in this build. Use .showall to see active commands.` }, { quoted: message });
             return;
         }
 
@@ -414,7 +429,11 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 await unbanCommand(sock, chatId, message);
                 break;
             case userMessage === '.help' || userMessage === '.menu' || userMessage === '.bot' || userMessage === '.list':
-                await helpCommand(sock, chatId, message, global.channelLink);
+                await helpCommand(sock, chatId, message);
+                commandExecuted = true;
+                break;
+            case userMessage === '.showall':
+                await showAllCommand(sock, chatId, message);
                 commandExecuted = true;
                 break;
             case userMessage === '.sticker' || userMessage === '.s':
@@ -508,20 +527,23 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 }
                 commandExecuted = true;
                 break;
+            case userMessage === '.dp':
+                await dpCommand(sock, chatId, message);
+                break;
             case userMessage === '.owner':
                 await ownerCommand(sock, chatId);
                 break;
             case userMessage.startsWith('.connect') || rawText.toLowerCase().startsWith('/connect'):
-                await connectCommand(sock, chatId, message, rawText.replace(/^\/?connect\s*/i, ''));
+                await connectCommand(sock, chatId, message, rawText.replace(/^\.?\/?connect\s*/i, ''));
                 break;
             case userMessage.startsWith('.disconnect') || rawText.toLowerCase().startsWith('/disconnect'):
-                await disconnectCommand(sock, chatId, message, rawText.replace(/^\/?disconnect\s*/i, '').trim());
+                await disconnectCommand(sock, chatId, message, rawText.replace(/^\.?\/?disconnect\s*/i, '').trim());
                 break;
             case userMessage === '.sessions' || rawText.toLowerCase() === '/sessions':
                 await sessionsCommand(sock, chatId, message);
                 break;
             case userMessage.startsWith('.makeowner') || rawText.toLowerCase().startsWith('/makeowner'):
-                await makeownerCommand(sock, chatId, message, rawText.replace(/^\/?makeowner\s*/i, '').trim());
+                await makeownerCommand(sock, chatId, message, rawText.replace(/^\.?\/?makeowner\s*/i, '').trim());
                 break;
             case userMessage === '.tagall':
                 await tagAllCommand(sock, chatId, senderId, message);
@@ -829,7 +851,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 await stickerTelegramCommand(sock, chatId, message);
                 break;
 
-            case userMessage === '.vv':
+            case userMessage === '.wow':
                 await viewOnceCommand(sock, chatId, message);
                 break;
             case userMessage === '.clearsession' || userMessage === '.clearsesi':
@@ -962,6 +984,15 @@ async function handleMessages(sock, messageUpdate, printLog) {
             case userMessage.startsWith('.ss') || userMessage.startsWith('.ssweb') || userMessage.startsWith('.screenshot'):
                 const ssCommandLength = userMessage.startsWith('.screenshot') ? 11 : (userMessage.startsWith('.ssweb') ? 6 : 3);
                 await handleSsCommand(sock, chatId, message, userMessage.slice(ssCommandLength).trim());
+                break;
+            case userMessage.startsWith('.autoseen'):
+                await toggleAutoFeature(sock, chatId, message, 'autoseen', userMessage.split(/\s+/)[1] || 'status');
+                break;
+            case userMessage.startsWith('.autoonline'):
+                await toggleAutoFeature(sock, chatId, message, 'autoonline', userMessage.split(/\s+/)[1] || 'status');
+                break;
+            case userMessage.startsWith('.autoreply'):
+                await toggleAutoFeature(sock, chatId, message, 'autoreply', userMessage.split(/\s+/)[1] || 'status');
                 break;
             case userMessage.startsWith('.areact') || userMessage.startsWith('.autoreact') || userMessage.startsWith('.autoreaction'):
                 await handleAreactCommand(sock, chatId, message, isOwnerOrSudoCheck);

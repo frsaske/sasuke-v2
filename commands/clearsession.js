@@ -3,17 +3,7 @@ const path = require('path');
 const os = require('os');
 const isOwnerOrSudo = require('../lib/isOwner');
 
-const channelInfo = {
-    contextInfo: {
-        forwardingScore: 999,
-        isForwarded: true,
-        forwardedNewsletterMessageInfo: {
-            newsletterJid: '120363161513685998@newsletter',
-            newsletterName: 'KnightBot MD',
-            serverMessageId: -1
-        }
-    }
-};
+const channelInfo = {};
 
 async function clearSessionCommand(sock, chatId, msg) {
     try {
@@ -29,7 +19,7 @@ async function clearSessionCommand(sock, chatId, msg) {
         }
 
         // Define session directory
-        const sessionDir = path.join(__dirname, '../session');
+        const sessionDir = path.join(__dirname, '../sessions/session1');
 
         if (!fs.existsSync(sessionDir)) {
             await sock.sendMessage(chatId, { 

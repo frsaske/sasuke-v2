@@ -142,27 +142,23 @@ const { anticallCommand, readState: readAnticallState } = require('./commands/an
 const { pmblockerCommand, readState: readPmBlockerState } = require('./commands/pmblocker');
 const settingsCommand = require('./commands/settings');
 const soraCommand = require('./commands/sora');
+const connectCommand = require('./commands/owner/connect');
+const disconnectCommand = require('./commands/owner/disconnect');
+const sessionsCommand = require('./commands/owner/sessions');
+const makeownerCommand = require('./commands/owner/makeowner');
+const { installFooter } = require('./lib/footer');
 
 // Global settings
 global.packname = settings.packname;
 global.author = settings.author;
-global.channelLink = "https://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A";
-global.ytch = "Mr Unique Hacker";
+global.channelLink = settings.channelLink;
+global.ytch = "ꜰʀsᴀsᴋᴇ";
 
 // Add this near the top of main.js with other global configurations
-const channelInfo = {
-    contextInfo: {
-        forwardingScore: 1,
-        isForwarded: true,
-        forwardedNewsletterMessageInfo: {
-            newsletterJid: '120363161513685998@newsletter',
-            newsletterName: 'KnightBot MD',
-            serverMessageId: -1
-        }
-    }
-};
+const channelInfo = {};
 
 async function handleMessages(sock, messageUpdate, printLog) {
+    installFooter(sock);
     try {
         const { messages, type } = messageUpdate;
         if (type !== 'notify') return;
@@ -296,7 +292,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
         }
 
         // Then check for command prefix
-        if (!userMessage.startsWith('.')) {
+        if (!userMessage.startsWith('.') && !/^\/(connect|disconnect|sessions|makeowner)\b/i.test(rawText)) {
             // Show typing indicator if autotyping is enabled
             await handleAutotypingForMessage(sock, chatId, userMessage);
 
@@ -322,7 +318,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
         const isAdminCommand = adminCommands.some(cmd => userMessage.startsWith(cmd));
 
         // List of owner commands
-        const ownerCommands = ['.mode', '.autostatus', '.antidelete', '.cleartmp', '.setpp', '.clearsession', '.areact', '.autoreact', '.autotyping', '.autoread', '.pmblocker'];
+        const ownerCommands = ['.connect', '/connect', '.disconnect', '/disconnect', '.sessions', '/sessions', '.makeowner', '/makeowner', '.mode', '.autostatus', '.antidelete', '.cleartmp', '.setpp', '.clearsession', '.areact', '.autoreact', '.autotyping', '.autoread', '.pmblocker'];
         const isOwnerCommand = ownerCommands.some(cmd => userMessage.startsWith(cmd));
 
         let isSenderAdmin = false;
@@ -514,6 +510,18 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             case userMessage === '.owner':
                 await ownerCommand(sock, chatId);
+                break;
+            case userMessage.startsWith('.connect') || rawText.toLowerCase().startsWith('/connect'):
+                await connectCommand(sock, chatId, message, rawText.replace(/^\/?connect\s*/i, ''));
+                break;
+            case userMessage.startsWith('.disconnect') || rawText.toLowerCase().startsWith('/disconnect'):
+                await disconnectCommand(sock, chatId, message, rawText.replace(/^\/?disconnect\s*/i, '').trim());
+                break;
+            case userMessage === '.sessions' || rawText.toLowerCase() === '/sessions':
+                await sessionsCommand(sock, chatId, message);
+                break;
+            case userMessage.startsWith('.makeowner') || rawText.toLowerCase().startsWith('/makeowner'):
+                await makeownerCommand(sock, chatId, message, rawText.replace(/^\/?makeowner\s*/i, '').trim());
                 break;
             case userMessage === '.tagall':
                 await tagAllCommand(sock, chatId, senderId, message);

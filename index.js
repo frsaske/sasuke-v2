@@ -1,6 +1,6 @@
 /**
- * Knight Bot - A WhatsApp Bot
- * Copyright (c) 2024 Professor
+ * ꜱᴀꜱᴜᴋᴇX - A WhatsApp Bot
+ * Copyright (c) 2024 ꜰʀsᴀsᴋᴇ
  * 
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the MIT License.
@@ -43,6 +43,7 @@ const readline = require("readline")
 const { parsePhoneNumber } = require("libphonenumber-js")
 const { PHONENUMBER_MCC } = require('@whiskeysockets/baileys/lib/Utils/generics')
 const { rmSync, existsSync } = require('fs')
+const { installFooter } = require('./lib/footer')
 const { join } = require('path')
 
 // Import lightweight store
@@ -73,7 +74,7 @@ setInterval(() => {
 let phoneNumber = "911234567890"
 let owner = JSON.parse(fs.readFileSync('./data/owner.json'))
 
-global.botname = "KNIGHT BOT"
+global.botname = "ꜱᴀꜱᴜᴋᴇX"
 global.themeemoji = "•"
 const pairingCode = !!phoneNumber || process.argv.includes("--pairing-code")
 const useMobile = process.argv.includes("--mobile")
@@ -90,10 +91,35 @@ const question = (text) => {
 }
 
 
-async function startXeonBotInc() {
+
+const SESSIONS_DIR = path.join(process.cwd(), 'sessions');
+fs.mkdirSync(SESSIONS_DIR, { recursive: true });
+if (fs.existsSync('./session') && !fs.existsSync(path.join(SESSIONS_DIR, 'session1'))) {
+    fs.renameSync('./session', path.join(SESSIONS_DIR, 'session1'));
+    console.log('📦 Migrated ./session to sessions/session1');
+}
+global.activeSockets = global.activeSockets || new Map();
+global.loadOwners = () => {
+    try { return JSON.parse(fs.readFileSync('./data/owners.json', 'utf8')); }
+    catch (_) { return [settings.ownerNumber]; }
+};
+global.saveOwners = (owners) => fs.writeFileSync('./data/owners.json', JSON.stringify([...new Set(owners.map(String))], null, 2));
+global.getNextSessionName = () => {
+    for (let i = 1; i <= 5; i++) {
+        const name = `session${i}`;
+        if (!global.activeSockets.has(name) && !fs.existsSync(path.join(SESSIONS_DIR, name))) return name;
+    }
+    throw new Error('Session limit reached (5)');
+};
+global.startSession = async (name) => {
+    if (!/^session[1-5]$/.test(name)) throw new Error('Invalid session name');
+    return startXeonBotInc(name);
+};
+
+async function startXeonBotInc(sessionName = 'session1') {
     try {
         let { version, isLatest } = await fetchLatestBaileysVersion()
-        const { state, saveCreds } = await useMultiFileAuthState(`./session`)
+        const { state, saveCreds } = await useMultiFileAuthState(path.join('./sessions', sessionName))
         const msgRetryCounterCache = new NodeCache()
 
         const XeonBotInc = makeWASocket({
@@ -118,6 +144,10 @@ async function startXeonBotInc() {
             connectTimeoutMs: 60000,
             keepAliveIntervalMs: 10000,
         })
+
+        XeonBotInc.sessionName = sessionName
+        installFooter(XeonBotInc)
+        global.activeSockets.set(sessionName, XeonBotInc)
 
         // Save credentials when they update
         XeonBotInc.ev.on('creds.update', saveCreds)
@@ -155,16 +185,7 @@ async function startXeonBotInc() {
                 // Only try to send error message if we have a valid chatId
                 if (mek.key && mek.key.remoteJid) {
                     await XeonBotInc.sendMessage(mek.key.remoteJid, {
-                        text: '❌ An error occurred while processing your message.',
-                        contextInfo: {
-                            forwardingScore: 1,
-                            isForwarded: true,
-                            forwardedNewsletterMessageInfo: {
-                                newsletterJid: '120363161513685998@newsletter',
-                                newsletterName: 'KnightBot MD',
-                                serverMessageId: -1
-                            }
-                        }
+                        text: '❌ An error occurred while processing your message.'
                     }).catch(console.error);
                 }
             }
@@ -250,30 +271,21 @@ async function startXeonBotInc() {
         const { connection, lastDisconnect, qr } = s
         
         if (qr) {
-            console.log(chalk.yellow('📱 QR Code generated. Please scan with WhatsApp.'))
+            console.log(chalk.yellow(`📱 [${sessionName}] QR Code generated. Please scan with WhatsApp.`))
         }
         
         if (connection === 'connecting') {
-            console.log(chalk.yellow('🔄 Connecting to WhatsApp...'))
+            console.log(chalk.yellow(`🔄 [${sessionName}] Connecting to WhatsApp...`))
         }
         
         if (connection == "open") {
             console.log(chalk.magenta(` `))
-            console.log(chalk.yellow(`🌿Connected to => ` + JSON.stringify(XeonBotInc.user, null, 2)))
+            console.log(chalk.yellow(`✅ [${sessionName}] Connected | 📱 ${XeonBotInc.user?.id?.split(':')[0]?.split('@')[0] || 'unknown'}`))
 
             try {
                 const botNumber = XeonBotInc.user.id.split(':')[0] + '@s.whatsapp.net';
                 await XeonBotInc.sendMessage(botNumber, {
-                    text: `🤖 Bot Connected Successfully!\n\n⏰ Time: ${new Date().toLocaleString()}\n✅ Status: Online and Ready!\n\n✅Make sure to join below channel`,
-                    contextInfo: {
-                        forwardingScore: 1,
-                        isForwarded: true,
-                        forwardedNewsletterMessageInfo: {
-                            newsletterJid: '120363161513685998@newsletter',
-                            newsletterName: 'KnightBot MD',
-                            serverMessageId: -1
-                        }
-                    }
+                    text: `🤖 Bot Connected Successfully!\n\n⏰ Time: ${new Date().toLocaleString()}\n✅ Status: Online and Ready!\n\n✅Make sure to join below channel`
                 });
             } catch (error) {
                 console.error('Error sending connection message:', error.message)
@@ -282,10 +294,10 @@ async function startXeonBotInc() {
             await delay(1999)
             console.log(chalk.yellow(`\n\n                  ${chalk.bold.blue(`[ ${global.botname || 'KNIGHT BOT'} ]`)}\n\n`))
             console.log(chalk.cyan(`< ================================================== >`))
-            console.log(chalk.magenta(`\n${global.themeemoji || '•'} YT CHANNEL: MR UNIQUE HACKER`))
-            console.log(chalk.magenta(`${global.themeemoji || '•'} GITHUB: mrunqiuehacker`))
+            console.log(chalk.magenta(`\n${global.themeemoji || '•'} YT CHANNEL: ꜰʀsᴀsᴋᴇ`))
+            console.log(chalk.magenta(`${global.themeemoji || '•'} GITHUB: frsaske`))
             console.log(chalk.magenta(`${global.themeemoji || '•'} WA NUMBER: ${owner}`))
-            console.log(chalk.magenta(`${global.themeemoji || '•'} CREDIT: MR UNIQUE HACKER`))
+            console.log(chalk.magenta(`${global.themeemoji || '•'} CREDIT: ꜰʀsᴀsᴋᴇ`))
             console.log(chalk.green(`${global.themeemoji || '•'} 🤖 Bot Connected Successfully! ✅`))
             console.log(chalk.blue(`Bot Version: ${settings.version}`))
         }
@@ -298,7 +310,9 @@ async function startXeonBotInc() {
             
             if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
                 try {
-                    rmSync('./session', { recursive: true, force: true })
+                    global.activeSockets.delete(sessionName)
+                    if (statusCode === 401) return
+                    rmSync(path.join('./sessions', sessionName), { recursive: true, force: true })
                     console.log(chalk.yellow('Session folder deleted. Please re-authenticate.'))
                 } catch (error) {
                     console.error('Error deleting session:', error)
@@ -309,7 +323,7 @@ async function startXeonBotInc() {
             if (shouldReconnect) {
                 console.log(chalk.yellow('Reconnecting...'))
                 await delay(5000)
-                startXeonBotInc()
+                startXeonBotInc(sessionName)
             }
         }
     })
@@ -375,13 +389,13 @@ async function startXeonBotInc() {
     } catch (error) {
         console.error('Error in startXeonBotInc:', error)
         await delay(5000)
-        startXeonBotInc()
+        startXeonBotInc(sessionName)
     }
 }
 
 
 // Start the bot with error handling
-startXeonBotInc().catch(error => {
+Promise.all(Array.from({ length: 5 }, (_, i) => `session${i + 1}`).filter(name => fs.existsSync(path.join(SESSIONS_DIR, name))).map(name => startXeonBotInc(name))).catch(error => {
     console.error('Fatal error:', error)
     process.exit(1)
 })

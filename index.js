@@ -104,23 +104,6 @@ global.loadOwners = () => {
     catch (_) { return [settings.ownerNumber]; }
 };
 global.saveOwners = (owners) => fs.writeFileSync('./data/owners.json', JSON.stringify([...new Set(owners.map(String))], null, 2));
-global.getNextSessionName = () => {
-    for (let i = 1; i <= 5; i++) {
-        const name = `session${i}`;
-        if (!global.activeSockets.has(name) && !fs.existsSync(path.join(SESSIONS_DIR, name))) return name;
-    }
-    throw new Error('Session limit reached (5)');
-};
-global.startSession = async (name) => {
-    if (!/^session[1-5]$/.test(name)) throw new Error('Invalid session name');
-    const socket = await startXeonBotInc(name);
-    await Promise.race([
-        socket.__connectionReady,
-        new Promise((_, reject) => setTimeout(() => reject(new Error(`${name} connection timeout`)), 60000))
-    ]);
-    return socket;
-};
-
 async function startXeonBotInc(sessionName = 'session1') {
     try {
         let { version, isLatest } = await fetchLatestBaileysVersion()
@@ -153,14 +136,6 @@ async function startXeonBotInc(sessionName = 'session1') {
         XeonBotInc.sessionName = sessionName
         installFooter(XeonBotInc)
         global.activeSockets.set(sessionName, XeonBotInc)
-        let connectionReadyResolve;
-        let connectionReadyReject;
-        XeonBotInc.__connectionReady = new Promise((resolve, reject) => {
-            connectionReadyResolve = resolve;
-            connectionReadyReject = reject;
-        });
-        // Startup sessions are not awaited; prevent an early close from becoming unhandled.
-        XeonBotInc.__connectionReady.catch(() => {});
 
         // Save credentials when they update
         XeonBotInc.ev.on('creds.update', saveCreds)
@@ -292,7 +267,6 @@ async function startXeonBotInc(sessionName = 'session1') {
         }
         
         if (connection == "open") {
-            connectionReadyResolve(XeonBotInc)
             console.log(chalk.magenta(` `))
             console.log(chalk.yellow(`✅ [${sessionName}] Connected | 📱 ${XeonBotInc.user?.id?.split(':')[0]?.split('@')[0] || 'unknown'}`))
 
@@ -317,7 +291,6 @@ async function startXeonBotInc(sessionName = 'session1') {
         }
         
         if (connection === 'close') {
-            if (connectionReadyReject) connectionReadyReject(lastDisconnect?.error || new Error('connection closed'))
             const shouldReconnect = (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut
             const statusCode = lastDisconnect?.error?.output?.statusCode
             
@@ -410,7 +383,22 @@ async function startXeonBotInc(sessionName = 'session1') {
 
 
 // Start the bot with error handling
-Promise.all(Array.from({ length: 5 }, (_, i) => `session${i + 1}`).filter(name => fs.existsSync(path.join(SESSIONS_DIR, name))).map(name => startXeonBotInc(name))).catch(error => {
+const configuredSessions = Array.from({ length: 5 }, (_, i) => `session${i + 1}`).filter((name) => {
+    const sessionDir = path.join(SESSIONS_DIR, name);
+    const credsPath = path.join(sessionDir, 'creds.json');
+    if (!fs.existsSync(credsPath)) return false;
+    try {
+        JSON.parse(fs.readFileSync(credsPath, 'utf8'));
+        return true;
+    } catch (error) {
+        console.error(`❌ [${name}] Invalid creds.json; session skipped.`);
+        return false;
+    }
+});
+if (!configuredSessions.length) {
+    console.log('📁 No sessions found. Upload creds.json into sessions/session1..session5 and restart.');
+}
+Promise.all(configuredSessions.map(name => startXeonBotInc(name))).catch(error => {
     console.error('Fatal error:', error)
     process.exit(1)
 })

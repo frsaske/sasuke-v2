@@ -50,26 +50,49 @@ sessions/session4/
 sessions/session5/
 ```
 
-`setup-vps.sh` migrates an older `session/creds.json` installation into `sessions/session1/creds.json`. A fresh installation without credentials must be authenticated before it can connect.
+`setup-vps.sh` migrates an older `session/creds.json` installation into `sessions/session1/creds.json`. A fresh installation without credentials stays idle until you manually upload a valid `creds.json`.
 
 **Never publish real `creds.json` files in a public repository.** They contain active WhatsApp login credentials. If credentials are exposed, log out the linked device from WhatsApp immediately and generate a new session.
+
+## Manual session upload
+
+There is no `.connect` command. Upload each WhatsApp credential file manually to the VPS, then restart the bot:
+
+```text
+sessions/session1/creds.json
+sessions/session2/creds.json
+sessions/session3/creds.json
+sessions/session4/creds.json
+sessions/session5/creds.json
+```
+
+Example:
+
+```bash
+mkdir -p sessions/session2
+# Upload creds.json into sessions/session2/ using your hosting file manager/SFTP
+chmod 700 sessions/session2
+chmod 600 sessions/session2/creds.json
+npm start
+```
+
+Only folders containing a valid `creds.json` are started. The bot never creates a live session from a chat message.
 
 ## Owner commands
 
 The configured owner number is `917052500819`. Owner commands include:
 
 ```text
-/connect <raw creds.json>
-/disconnect session2
-/sessions
-/makeowner <international number>
+.disconnect session2
+.sessions
+.makeowner <international number>
 ```
 
-Dot-prefixed equivalents are also supported. The normal bot command prefix remains `.`.
+The normal bot command prefix remains `.`.
 
 ## Multi-session behavior
 
-At startup, the bot loads every existing session directory from `session1` through `session5`. Each socket has independent reconnection handling. A 401/logout on one session does not stop the other sessions. A new session can be connected live with `/connect`, without restarting the process.
+At startup, the bot loads every existing session directory from `session1` through `session5`. Each socket has independent reconnection handling. A 401/logout on one session does not stop the other sessions. New sessions are added by uploading their `creds.json` manually and restarting the bot.
 
 ## Running continuously with PM2
 
@@ -97,7 +120,7 @@ If PM2 is not being used, stop the current process with `Ctrl+C` and run `./star
 ## Features added in v2
 
 - Five independent WhatsApp sessions.
-- Live owner-only connect, disconnect, sessions, and make-owner commands.
+- Owner-only disconnect, sessions, and make-owner commands.
 - Configurable owners in `data/owners.json`.
 - Centralized footer for text, image, video, and document replies.
 - Updated ꜱᴀꜱᴜᴋᴇX branding and channel configuration.

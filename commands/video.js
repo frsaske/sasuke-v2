@@ -151,7 +151,7 @@ async function videoCommand(sock, chatId, message) {
             video: { url: videoData.download || videoData.dl || videoData.url },
             mimetype: 'video/mp4',
             fileName: `${(videoData.title || videoTitle || 'video').replace(/[^\w\s-]/g, '')}.mp4`,
-            caption: `*${videoData.title || videoTitle || 'Video'}*\n\n> *_Downloaded by Knight Bot MD_*`
+            caption: `*${videoData.title || videoTitle || 'Video'}*`
         }, { quoted: message });
 
 
@@ -176,4 +176,4 @@ async function videoCommand(sock, chatId, message) {
     }
 }
 
-module.exports = videoCommand; 
+module.exports = videoCommand;

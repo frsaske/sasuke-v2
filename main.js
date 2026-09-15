@@ -147,7 +147,6 @@ const soraCommand = require('./commands/sora');
 const dpCommand = require('./commands/dp');
 const { toggle: toggleAutoFeature, handleAutoReply, handlePresence, read: readAutoFeatures } = require('./commands/autoFeatures');
 const { isDisabled } = require('./commands/registry');
-const connectCommand = require('./commands/owner/connect');
 const disconnectCommand = require('./commands/owner/disconnect');
 const sessionsCommand = require('./commands/owner/sessions');
 const makeownerCommand = require('./commands/owner/makeowner');
@@ -302,7 +301,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
         }
 
         // Then check for command prefix
-        if (!userMessage.startsWith('.') && !/^\/(connect|disconnect|sessions|makeowner)\b/i.test(rawText)) {
+        if (!userMessage.startsWith('.') && !/^\/(disconnect|sessions|makeowner)\b/i.test(rawText)) {
             // Show typing indicator if autotyping is enabled
             await handleAutotypingForMessage(sock, chatId, userMessage);
 
@@ -333,7 +332,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
         const isAdminCommand = adminCommands.some(cmd => userMessage.startsWith(cmd));
 
         // List of owner commands
-        const ownerCommands = ['.connect', '/connect', '.disconnect', '/disconnect', '.sessions', '/sessions', '.makeowner', '/makeowner', '.mode', '.autostatus', '.antidelete', '.cleartmp', '.setpp', '.clearsession', '.areact', '.autoreact', '.autotyping', '.autoread', '.pmblocker'];
+        const ownerCommands = ['.disconnect', '/disconnect', '.sessions', '/sessions', '.makeowner', '/makeowner', '.mode', '.autostatus', '.antidelete', '.cleartmp', '.setpp', '.clearsession', '.areact', '.autoreact', '.autotyping', '.autoread', '.pmblocker'];
         const isOwnerCommand = ownerCommands.some(cmd => userMessage.startsWith(cmd));
 
         let isSenderAdmin = false;
@@ -532,9 +531,6 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             case userMessage === '.owner':
                 await ownerCommand(sock, chatId);
-                break;
-            case userMessage.startsWith('.connect') || rawText.toLowerCase().startsWith('/connect'):
-                await connectCommand(sock, chatId, message, rawText.replace(/^\.?\/?connect\s*/i, ''));
                 break;
             case userMessage.startsWith('.disconnect') || rawText.toLowerCase().startsWith('/disconnect'):
                 await disconnectCommand(sock, chatId, message, rawText.replace(/^\.?\/?disconnect\s*/i, '').trim());

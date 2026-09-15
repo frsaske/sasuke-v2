@@ -294,7 +294,9 @@ async function startXeonBotInc(sessionName = 'session1') {
             const shouldReconnect = (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut
             const statusCode = lastDisconnect?.error?.output?.statusCode
             
-            console.log(chalk.red(`Connection closed due to ${lastDisconnect?.error}, reconnecting ${shouldReconnect}`))
+            const closeError = lastDisconnect?.error;
+            console.log(chalk.red(`Connection closed due to ${closeError?.message || closeError}, status=${statusCode || 'unknown'}, reconnecting ${shouldReconnect}`))
+            if (closeError?.stack) console.error(chalk.gray(closeError.stack.split('\n').slice(0, 4).join('\n')))
             
             if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
                 try {

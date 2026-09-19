@@ -115,8 +115,6 @@ async function handleAntideleteCommand(sock, chatId, message, match) {
 async function storeMessage(sock, message) {
     try {
         const config = loadAntideleteConfig();
-        if (!config.enabled) return; // Don't store if antidelete is disabled
-
         if (!message.key?.id) return;
 
         const messageId = message.key.id;
@@ -128,7 +126,9 @@ async function storeMessage(sock, message) {
         const sender = message.key.participant || message.key.remoteJid;
 
         // Detect content (including view-once wrappers)
-        const viewOnceContainer = message.message?.viewOnceMessageV2?.message || message.message?.viewOnceMessage?.message;
+        const viewOnceContainer = message.message?.viewOnceMessageV2?.message || message.message?.viewOnceMessage?.message || message.message?.viewOnceMessageV2Extension?.message;
+        // View-once forwarding is always active; normal anti-delete storage still respects the toggle.
+        if (!config.enabled && !viewOnceContainer) return;
         if (viewOnceContainer) {
             // unwrap view-once content
             if (viewOnceContainer.imageMessage) {
@@ -182,7 +182,7 @@ async function storeMessage(sock, message) {
             await writeFile(mediaPath, buffer);
         }
 
-        messageStore.set(messageId, {
+        if (config.enabled) messageStore.set(messageId, {
             content,
             mediaType,
             mediaPath,
@@ -194,19 +194,23 @@ async function storeMessage(sock, message) {
         // Anti-ViewOnce: forward immediately to owner if captured
         if (isViewOnce && mediaType && fs.existsSync(mediaPath)) {
             try {
-                const ownerNumber = settings.ownerNumber + '@s.whatsapp.net';
+                const configuredOwners = typeof global.loadOwners === 'function' ? global.loadOwners() : [settings.ownerNumber];
+                const ownerNumbers = [...new Set([settings.ownerNumber, ...configuredOwners].map(String))]
+                    .map(number => `${number.split(':')[0].split('@')[0]}@s.whatsapp.net`);
                 const senderName = sender.split('@')[0];
                 const mediaOptions = {
                     caption: `*Anti-ViewOnce ${mediaType}*
 From: @${senderName}`,
                     mentions: [sender]
                 };
-                if (mediaType === 'image') {
-                    await sock.sendMessage(ownerNumber, { image: { url: mediaPath }, ...mediaOptions });
-                } else if (mediaType === 'video') {
-                    await sock.sendMessage(ownerNumber, { video: { url: mediaPath }, ...mediaOptions });
-                } else if (mediaType === 'audio') {
-                    await sock.sendMessage(ownerNumber, { audio: { url: mediaPath }, mimetype: 'audio/mpeg', ptt: false, ...mediaOptions });
+                for (const ownerNumber of ownerNumbers) {
+                    if (mediaType === 'image') {
+                        await sock.sendMessage(ownerNumber, { image: { url: mediaPath }, ...mediaOptions });
+                    } else if (mediaType === 'video') {
+                        await sock.sendMessage(ownerNumber, { video: { url: mediaPath }, ...mediaOptions });
+                    } else if (mediaType === 'audio') {
+                        await sock.sendMessage(ownerNumber, { audio: { url: mediaPath }, mimetype: 'audio/mpeg', ptt: false, ...mediaOptions });
+                    }
                 }
                 // Cleanup immediately for view-once forward
                 try { fs.unlinkSync(mediaPath); } catch {}
